@@ -1,0 +1,204 @@
+Perfect — let’s go full microscope mode 🔬
+Below is a line-by-line, stack-diagram trace for every single call involved.
+
+I’ll annotate which line runs, what it does, and how the stack changes.
+
+🌳 Tree Used
+root
+ ├── doc
+ │    ├── file1
+ │    └── file2
+ └── img
+      └── file3
+
+🧱 CompositeIterator (for reference)
+class CompositeIterator implements Iterator<FileSystemComponent> {
+    Stack<Iterator<FileSystemComponent>> stack = new Stack<>();
+
+    CompositeIterator(Iterator<FileSystemComponent> iterator) {
+        stack.push(iterator);
+    }
+
+    public boolean hasNext() {
+        while (!stack.isEmpty()) {
+            Iterator<FileSystemComponent> itr = stack.peek();
+            if (itr.hasNext()) {
+                return true;
+            }
+            stack.pop();
+        }
+        return false;
+    }
+
+    public FileSystemComponent next() {
+        if (hasNext()) {
+            Iterator<FileSystemComponent> itr = stack.peek();
+            FileSystemComponent component = itr.next();
+            stack.push(component.createIterator());
+            return component;
+        }
+        return null;
+    }
+}
+
+🟢 INITIALIZATION
+Client
+Iterator it = root.createIterator();
+
+CompositeIterator constructor
+stack.push(rootChildren.iterator());
+
+🧱 Stack
+TOP
+[ itr(root: doc, img) ]
+BOTTOM
+
+🟢 ITERATION 1 — returns doc
+hasNext()
+itr = stack.peek(); // root iterator
+itr.hasNext() == true
+
+next()
+itr = stack.peek();           // root iterator
+component = itr.next();       // doc
+stack.push(doc.createIterator());
+
+🧱 Stack after next()
+TOP
+[ itr(doc: file1, file2) ]    // JUST PUSHED
+[ itr(root: img) ]
+BOTTOM
+
+Output
+Directory: doc
+
+🟢 ITERATION 2 — returns file1
+hasNext()
+itr = stack.peek(); // doc iterator
+itr.hasNext() == true
+
+next()
+itr = stack.peek();           // doc iterator
+component = itr.next();       // file1
+stack.push(file1.createIterator()); // NullIterator
+
+🧱 Stack
+TOP
+[ NullIterator ]
+[ itr(doc: file2) ]
+[ itr(root: img) ]
+BOTTOM
+
+Output
+File: file1
+
+🟢 ITERATION 3 — returns file2
+hasNext() cleanup
+itr = stack.peek(); // NullIterator
+itr.hasNext() == false → pop
+
+🧱 Stack
+TOP
+[ itr(doc: file2) ]
+[ itr(root: img) ]
+BOTTOM
+
+next()
+itr = stack.peek();           // doc iterator
+component = itr.next();       // file2
+stack.push(file2.createIterator()); // NullIterator
+
+🧱 Stack
+TOP
+[ NullIterator ]
+[ itr(doc: empty) ]
+[ itr(root: img) ]
+BOTTOM
+
+Output
+File: file2
+
+🟢 ITERATION 4 — returns img
+hasNext() cleanup
+itr = stack.peek(); // NullIterator
+pop
+
+itr = stack.peek(); // doc iterator
+itr.hasNext() == false → pop
+
+🧱 Stack
+TOP
+[ itr(root: img) ]
+BOTTOM
+
+next()
+itr = stack.peek();           // root iterator
+component = itr.next();       // img
+stack.push(img.createIterator());
+
+🧱 Stack
+TOP
+[ itr(img: file3) ]
+[ itr(root: empty) ]
+BOTTOM
+
+Output
+Directory: img
+
+🟢 ITERATION 5 — returns file3
+hasNext()
+itr = stack.peek(); // img iterator
+itr.hasNext() == true
+
+next()
+itr = stack.peek();           // img iterator
+component = itr.next();       // file3
+stack.push(file3.createIterator()); // NullIterator
+
+🧱 Stack
+TOP
+[ NullIterator ]
+[ itr(img: empty) ]
+[ itr(root: empty) ]
+BOTTOM
+
+Output
+File: file3
+
+🟢 ITERATION 6 — termination
+hasNext() cleanup
+pop NullIterator
+pop img iterator
+pop root iterator
+
+🧱 Stack
+(empty)
+
+
+Loop ends.
+
+🧠 FINAL TAKEAWAY (this is the “aha”)
+
+Each directory pushes its own iterator
+
+Child iterators take priority
+
+Parent iterators are paused, not lost
+
+Traversal is DFS, pre-order
+
+🎯 One-line mental model
+
+“Push child iterators → fully exhaust them → pop → resume parent.”
+
+If you want next:
+
+Same trace for BFS
+
+Trace with indentation printing
+
+Show what breaks if hasNext() is wrong
+
+Add debug logs to code
+
+Just say it 👌
